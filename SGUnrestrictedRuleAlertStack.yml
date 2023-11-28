@@ -1,0 +1,278 @@
+AWSTemplateFormatVersion: '2010-09-09'
+
+Metadata: 
+  AWS::CloudFormation::Interface: 
+    ParameterGroups: 
+      - 
+        Label: 
+          default: "AWS CloudTrail's CloudWatch Log Group Selection:"
+        Parameters: 
+          - SourceLogGroupName
+      -
+        Label:
+          default: "Email Notifications Configurations:"
+        Parameters: 
+          - SGAlertEmailSender
+          - SGAlertEmailRecipient  
+      -
+        Label:
+          default: "Webhooks Configurations:"
+        Parameters: 
+          - SGAlertWebhook
+
+
+Parameters:
+  SourceLogGroupName:
+    Type: String
+    Description: "Please enter the name of your CloudTrail Log Group in CloudWatch. (Format: /aws/myapp/mylogs)"
+  SGAlertEmailSender:
+    Type: String
+    Description: "Please enter the email sender. (Format: AWS Security Group Alert<sender@mydomain.com>)"
+  SGAlertEmailRecipient:
+    Type: String
+    Description: "Please enter the email recipient. (Format: recipient@mydomain.com>)"
+  SGAlertWebhook:
+    Type: String
+    Description: "Please enter the webhook URL. (Format: https://mydomain.webhook.office.com/webhookb2/xxxx)"
+  
+
+
+
+Resources:
+
+  SGUnrestrictedRuleAlertLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: SGUnrestrictedRuleAlertLambdaRole
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - "arn:aws:iam::aws:policy/AmazonSESFullAccess"
+        - "arn:aws:iam::aws:policy/AmazonSNSFullAccess"
+      Policies:
+        - PolicyName: AWSLambdaBasicExecutionRole
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: AllowAccessToLogGroups
+                Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                  - logs:FilterLogEvents
+                Resource:
+                  - !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:*'
+
+
+  SGUnrestrictedRuleAlertLambdaFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Handler: index.lambda_handler
+      Role: !GetAtt SGUnrestrictedRuleAlertLambdaRole.Arn
+      FunctionName: SGUnrestrictedRuleAlertLambdaFunction
+      Runtime: python3.11
+      MemorySize: 256
+      Timeout: 10
+      Environment:
+        Variables:
+          sender_email: !Ref SGAlertEmailSender
+          recipient_email: !Ref SGAlertEmailRecipient
+          teams_webhook_url: !Ref SGAlertWebhook
+      Code:
+        ZipFile: !Sub |
+          import boto3
+          import json
+          from datetime import datetime, timedelta
+          import urllib3
+
+          def lambda_handler(event, context):
+              
+              ## User variables - Please change them.
+              sender_email = 'AWS Security Group Alert<sender@mydomain.com>'
+              recipient_email = 'recipient@mydomain.com'
+              teams_webhook_url = 'https://mydomain.webhook.office.com/webhookb2/xxx'
+
+              ## Program variables
+              cloudwatch_logs = boto3.client('logs', region_name='ap-southeast-2')
+              log_group_name = 'aws-controltower/CloudTrailLogs'
+              filter_pattern = '{ ($.eventName = AuthorizeSecurityGroupIngress || $.eventName = CreateSecurityGroup) && (($.requestParameters.ipPermissions.items[0].ipRanges.items[0].cidrIp = "0.0.0.0/0") || ($.requestParameters.ipPermissions.items[0].ipv6Ranges.items[0].cidrIpv6 = "::/0")) }'
+
+              try:
+                  # Calculate the start time (5 minutes ago)
+                  start_time = datetime.utcnow() - timedelta(minutes=5)
+                  
+                  # Use boto3 to filter log events
+                  response = cloudwatch_logs.filter_log_events(
+                      logGroupName=log_group_name,
+                      startTime=int(start_time.timestamp()) * 1000,
+                      filterPattern=filter_pattern
+                  )
+
+                  ## Process the filtered log events
+                  log_events = response.get('events', [])
+                  for log_event in log_events:
+                      message = json.loads(log_event['message'])
+                      event_id = message.get('eventID')
+                      source_ip = message.get('sourceIPAddress')
+                      account_id = message['userIdentity']['accountId']
+                      security_group_id = message['requestParameters']['groupId']
+                      principal_id = message['userIdentity']['principalId']
+                  
+                  ## Send an email alert.
+                  sendEmail (event_id,source_ip,account_id,security_group_id,principal_id)
+                  
+                  ## Send a Webhook.
+                  sendWebhook(event_id,source_ip,account_id,security_group_id,principal_id)
+
+                  return {
+                      'statusCode': 200,
+                      'body': 'Lambda function executed successfully.'
+                  }
+              
+              except Exception as e:
+                  print(f"Error: {str(e)}")
+                  return {
+                      'statusCode': 500,
+                      'body': 'Lambda function encountered an error.'
+                  }
+
+
+          def sendEmail(event_id,source_ip,account_id,security_group_id,principal_id,sender_email,recipient_email,):
+
+              # Initialize the SES client
+              ses = boto3.client('ses', region_name='ap-southeast-2')
+              email_subject = "AWS Security Group Unrestricted Inbound Rule Add Alert"
+              email_body_content = "Hi,\n\nAn unrestricted inbound rule with source value of either 0.0.0.0 or ::/0 has been allowed recently in an AWS Security Group. The details are as follows.\n\nCloudTrail Event ID: " + str(event_id) + "\nSecurity Group ID: " + str(security_group_id)  + "\nAccount ID: " + str(account_id) + "\nUser ID: " + str(principle_id) + + "\nIP Address: " + str(source_ip) +
+              email_body_content_extra = "\n\nNote: If this alert has originated from a test account, this alert can be ignored.\n\nWith thanks,\nCloudOps Support."
+              
+              try:
+                  response = ses.send_email(
+                      Source=sender_email,
+                      Destination={
+                          'ToAddresses': [recipient_email]
+                      },
+                      Message={
+                          'Subject': {
+                              'Data': email_subject
+                          },
+                          'Body': {
+                              'Text': {
+                                  'Data': email_body_content + email_body_content_extra
+                              }
+                          }
+                      }
+                  )
+                  
+                  message_id = response['MessageId']
+                  
+                  return {
+                      'statusCode': 200,
+                      'body': f'Email sent successfully. Message ID: {message_id}'
+                  }
+              except Exception as e:
+                  print(f"Error sending email: {str(e)}")
+                  return {
+                      'statusCode': 500,
+                      'body': 'Email sending failed'
+                  }
+
+          def sendWebhook(event_id,source_ip,account_id,security_group_id,principal_id,teams_webhook_url):
+              
+              http = urllib3.PoolManager()
+              
+              try:
+                  message_payload = {
+                          "@type": "MessageCard",
+                          "@context": "http://schema.org/extensions",
+                          "themeColor": "FF0000",
+                          "summary": "AWS Security Groups Unrestricted Inbound Rule Add Alert",
+                          "sections": [
+                              {
+                                  "activityTitle": "AWS Security Groups Unrestricted Inbound Rule Add Alert",
+                                  "activitySubTitle": "An unrestricted inbound rule with source value of either 0.0.0.0 or ::/0 has been allowed recently in an AWS Security Group. The details are as follows.",
+                                  "markdown": "False",
+                                  "facts": [
+                                      {"name": "CloudTrail Event ID", "value": event_id},
+                                      {"name": "Security Group ID", "value": security_group_id},
+                                      {"name": "Account ID", "value": account_id},
+                                      {"name": "User ID", "value": principal_id},
+                                      {"name": "Source IP", "value": source_ip},
+                                      {"name": "Note:", "value": "Edit this to set your own message."}
+                                  ],
+                              }
+                          ]
+                      }
+
+                  encoded_msg = json.dumps(message_payload).encode('utf-8')
+                  resp = http.request("POST", teams_webhook_url, body=encoded_msg, headers = {'Content-Type': 'application/json'})
+
+              except Exception as e:
+                  print(f"Error sending the webhook: {str(e)}")
+                  return {
+                      'statusCode': 500,
+                      'body': 'Webhook sending failed'
+                  }
+
+
+  SGUnrestrictedRuleAlertTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: Security Groups Unrestricted Rule Alert Topic
+      TopicName: SGUnrestrictedRuleAlertTopic
+
+  SGUnrestrictedRuleAlertSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      Protocol: lambda
+      TopicArn: !Ref SGUnrestrictedRuleAlertTopic
+      Endpoint: !GetAtt SGUnrestrictedRuleAlertLambdaFunction.Arn
+
+  CloudTrailMetricFilter:
+    Type: 'AWS::Logs::MetricFilter'
+    Properties:
+      LogGroupName: !Ref SourceLogGroupName
+      FilterPattern: '{ ($.eventName = AuthorizeSecurityGroupIngress || $.eventName = CreateSecurityGroup) && (($.requestParameters.ipPermissions.items[0].ipRanges.items[0].cidrIp = "0.0.0.0/0") || ($.requestParameters.ipPermissions.items[0].ipv6Ranges.items[0].cidrIpv6 = "::/0")) }'
+      MetricTransformations:
+        - MetricName: "SecurityGroupEventCount"
+          MetricNamespace: "CloudTrailMetrics"
+          MetricValue: "1"
+
+  SecurityGroupConfigChangesAlarm:
+    Type: "AWS::CloudWatch::Alarm"
+    Properties:
+      AlarmName: "SecurityGroupConfigChangesAlarm"
+      AlarmDescription: "Triggered by AWS security group(s) config changes."
+      Namespace: "CloudTrailMetrics"
+      MetricName: "SecurityGroupEventCount"
+      Statistic: "Sum"
+      ComparisonOperator: "GreaterThanOrEqualToThreshold"
+      EvaluationPeriods: 1
+      Period: 300
+      Threshold: 1
+      ActionsEnabled: true
+      AlarmActions:
+        - !Ref SGUnrestrictedRuleAlertTopic
+
+  SGUnrestrictedRuleAlertLambdaSNSPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !GetAtt SGUnrestrictedRuleAlertLambdaFunction.Arn
+      Principal: sns.amazonaws.com
+      SourceArn: !Ref SGUnrestrictedRuleAlertTopic
+
+
+Outputs:
+  SGUnrestrictedRuleAlertLambdaFunctionArn:
+    Description: ARN of the Lambda function
+    Value: !GetAtt SGUnrestrictedRuleAlertLambdaFunction.Arn
+
+  SGUnrestrictedRuleAlertLambdaFunctionName:
+    Description: Name of the Lambda function
+    Value: !Ref SGUnrestrictedRuleAlertLambdaFunction
