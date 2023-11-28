@@ -9,17 +9,21 @@
 4. The SNS topic then triggers the attached Lambda function.
 5. The IAM role used for Lambda has permissions only for SES, SNS, and CloudWatch Log Groups.
 
+
 *Example: When deploying the stack*
 
 ![image](https://github.com/vinrepos/SGUnrestrictedRuleAlert/assets/104124987/1b39c4fa-164f-4f1b-a42f-2571364a24a8)
 
+
 *Example: Email*
 
-![image](https://github.com/vinrepos/SGUnrestrictedRuleAlert/assets/104124987/9c7a3529-0fb8-4b12-8880-082b83d4f886)
+![image](https://github.com/vinrepos/SGUnrestrictedRuleAlert/assets/104124987/303a5418-d164-48b0-8545-bbf71c9fbdea)
+
 
 *Example: Webhook*
 
-![image](https://github.com/vinrepos/SGUnrestrictedRuleAlert/assets/104124987/e2bf1b80-57a8-4151-b020-043e51148f0f)
+![image](https://github.com/vinrepos/SGUnrestrictedRuleAlert/assets/104124987/db68645a-fd33-4570-9913-f6295347cf07)
+
 
 
 Please create an issue for any sort of help with this.
