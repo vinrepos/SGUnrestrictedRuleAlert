@@ -9,7 +9,8 @@
 4. The SNS topic then triggers the attached Lambda function.
 5. The IAM role used for Lambda has permissions only for SES, SNS, and CloudWatch Log Groups.
 
-*How to* 
+*Where to deploy:* In the AWS account that has the CloudWatch Log group for your organisation's main CloudTrail trail. Most likely it is going to be the management account.
+
 
 *Example: When deploying the stack*
 
