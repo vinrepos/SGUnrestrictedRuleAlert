@@ -10,6 +10,7 @@
 5. The IAM role used for Lambda has permissions only for SES, SNS, and CloudWatch Log Groups.
 
 *How to* 
+
 *Example: When deploying the stack*
 
 ![image](https://github.com/vinrepos/SGUnrestrictedRuleAlert/assets/104124987/1b39c4fa-164f-4f1b-a42f-2571364a24a8)
