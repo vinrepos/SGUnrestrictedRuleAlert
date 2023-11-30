@@ -14,7 +14,7 @@
 
 *Example: When deploying the stack*
 
-![image](https://github.com/vinrepos/SGUnrestrictedRuleAlert/assets/104124987/1b39c4fa-164f-4f1b-a42f-2571364a24a8)
+![image](https://github.com/vinrepos/SGUnrestrictedRuleAlert/assets/104124987/ba6a8ca6-ae85-4cdf-9293-922f711d7bb3)
 
 
 *Expected Outcomes*
