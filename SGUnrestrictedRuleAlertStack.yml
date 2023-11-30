@@ -24,16 +24,16 @@ Metadata:
 Parameters:
   SourceLogGroupName:
     Type: String
-    Description: "Please enter the name of your CloudTrail Log Group in CloudWatch. (Format: /aws/myapp/mylogs)"
+    Description: "Please enter the name of your CloudTrail Log Group in CloudWatch."
   SGAlertEmailSender:
     Type: String
-    Description: "Please enter the email sender. (Format: AWS Security Group Alert<sender@mydomain.com>)"
+    Description: "Please enter the email sender. (Example: AWS Security Group Alert<sender@mydomain.com>)"
   SGAlertEmailRecipient:
     Type: String
-    Description: "Please enter the email recipient. (Format: recipient@mydomain.com>)"
+    Description: "Please enter the email recipient. (Example: recipient@mydomain.com>)"
   SGAlertWebhook:
     Type: String
-    Description: "Please enter the webhook URL. (Format: https://mydomain.webhook.office.com/webhookb2/xxxx)"
+    Description: "Please enter the webhook URL. (Example: https://mydomain.webhook.office.com/webhookb2/...@a1b2/c3d4....)"
   
 
 
